@@ -69,7 +69,7 @@ public class Users extends BaseResource {
     /**
      * Retrieve information about current user.
      * @param auth The access token needed to call the service.
-     * @return API Response, wraps an ActionSuccess({@link UserInfo}) or an ActionError entity
+     * @return API Response, wraps a {@link UserInfo} or an ActionError entity
      */
     @GET
     @Path("/user/info")

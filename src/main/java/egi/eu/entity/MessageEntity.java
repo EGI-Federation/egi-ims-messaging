@@ -30,12 +30,19 @@ public class MessageEntity extends PanacheEntityBase {
     @NotNull
     public String message;
 
+    @Column(length = 256)
+    public String link;
+
+    public Boolean wasRead;
+
     @Column(length = 120)
     @NotNull
     public String checkinUserId;
 
-    @UpdateTimestamp
     public LocalDateTime sentOn;
+
+    @UpdateTimestamp
+    public LocalDateTime changedOn;
 
 
     /***
@@ -51,15 +58,28 @@ public class MessageEntity extends PanacheEntityBase {
         super();
 
         this.message = message.message;
+        this.link = message.link;
         this.checkinUserId = message.checkinUserId;
+        this.wasRead = false;
+        this.sentOn = LocalDateTime.now();
     }
 
     /***
-     * Get messages older than the specified datetime, in reverse chronological order
+     * Get specific message.
+     * @param messageId The Id of the message
+     * @return Message entities
+     */
+    public static Uni<MessageEntity> getMessage(Long messageId) {
+
+        return find("id", messageId).firstResult();
+    }
+
+    /***
+     * Get messages for a user that are older than the specified datetime, in reverse chronological order.
      * @param checkinUserId The user to fetch messages for
      * @param from The date and time from where to start loading logs
      * @param limit The maximum number of logs to return
-     * @return Role log entities
+     * @return Message entities
      */
     public static Uni<List<MessageEntity>> getMessages(String checkinUserId, LocalDateTime from, int limit) {
 
@@ -69,6 +89,18 @@ public class MessageEntity extends PanacheEntityBase {
         return find("checkinUserId = :checkinUserId AND sentOn < :from ORDER BY sentOn DESC", params)
                 .page(Page.ofSize(limit))
                 .list();
+    }
+
+    /***
+     * Get the number of unread messages for a user.
+     * @param checkinUserId The user to check unread messages for
+     * @return Unread message count
+     */
+    public static Uni<Long> countUnreadMessages(String checkinUserId) {
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("checkinUserId", checkinUserId);
+        return count("checkinUserId = :checkinUserId AND wasRead = false", params);
     }
 
 }

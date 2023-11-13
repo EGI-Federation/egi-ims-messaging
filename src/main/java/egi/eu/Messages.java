@@ -9,6 +9,7 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.hibernate.reactive.mutiny.Mutiny;
 import org.jboss.resteasy.reactive.RestHeader;
+import org.jboss.resteasy.reactive.RestPath;
 import org.jboss.resteasy.reactive.RestQuery;
 import org.jboss.logging.Logger;
 import io.smallrye.mutiny.Uni;
@@ -23,6 +24,7 @@ import jakarta.ws.rs.core.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 import java.util.List;
 
@@ -81,19 +83,112 @@ public class Messages extends BaseResource {
     public Messages() { super(log); }
 
     /**
-     * Send notification message to a user.
+     * Send notification message to a user or to all users holding a role.
      * @param auth The access token needed to call the service.
-     * @param message The message to send and the recipient.
-     * @return API Response, wraps an ActionSuccess or an ActionError entity
+     * @param message The message to send and the recipient(s).
+     * @return API Response, wraps a {@link Count} or an ActionError entity
      */
     @POST
     @Path("/messages")
     @SecurityRequirement(name = "OIDC")
     @Consumes(MediaType.APPLICATION_JSON)
     @RolesAllowed( Role.IMS_USER )
-    @Operation(operationId = "sendToUser", summary = "Send message to a user")
+    @Operation(operationId = "sendMessage", summary = "Send message to a user or to all users holding a role")
     @APIResponses(value = {
             @APIResponse(responseCode = "201", description = "Sent",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = Count.class))),
+            @APIResponse(responseCode = "400", description="Invalid parameters or configuration",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = ActionError.class))),
+            @APIResponse(responseCode = "401", description="Authorization required"),
+            @APIResponse(responseCode = "503", description="Try again later")
+    })
+    public Uni<Response> send(@RestHeader(HttpHeaders.AUTHORIZATION) String auth, Message message)
+    {
+        addToDC("userIdCaller", identity.getAttribute(CheckinUser.ATTR_USERID));
+        addToDC("userNameCaller", identity.getAttribute(CheckinUser.ATTR_FULLNAME));
+        addToDC("processName", imsConfig.group());
+        addToDC("message", message);
+
+        final boolean sendToRole = null != message.process || null != message.role;
+        log.infof("Sending message to user%s", sendToRole ? "s with role" : "");
+
+        if(sendToRole && (null == message.process || null == message.role)) {
+            // Message must be addressed either to a user or to a role
+            var ae = new ActionError("badRequest",
+                               "Both IMS process and role must be specified when sending to users holding role");
+            return Uni.createFrom().item(ae.toResponse());
+        }
+
+        final var sentCount = new ArrayList<Integer>();
+        Uni<Response> result = Uni.createFrom().nullItem()
+
+            .chain(unused -> {
+                // Get REST client for Check-in
+                if(sendToRole && !checkin.init(this.checkinConfig, this.imsConfig, stub))
+                    // Could not get REST client
+                    return Uni.createFrom().failure(new ServiceException("invalidConfig"));
+
+                return Uni.createFrom().item(unused);
+            })
+            .chain(unused -> {
+                if(sendToRole)
+                    // List users holding role
+                    return checkin.listUsersWithGroupRolesAsync(message.process, message.role);
+
+                var userList = new ArrayList<CheckinUser>();
+                var user = new CheckinUser(message.checkinUserId);
+                userList.add(user);
+
+                return Uni.createFrom().item(userList);
+            })
+            .chain(usersWithRole -> {
+                return sf.withTransaction((session, tx) -> {
+                    // Create new message(s)
+                    message.process = null;
+                    message.role = null;
+
+                    var messages = new ArrayList<MessageEntity>();
+                    for(var user : usersWithRole) {
+                        message.checkinUserId = user.checkinUserId;
+                        messages.add(new MessageEntity(message));
+                    }
+                    sentCount.add(messages.size());
+
+                    return session.persistAll(messages.toArray());
+                });
+            })
+            .chain(unused -> {
+                // Send complete, success
+                var count = new Count("Sent");
+                count.sentMessages = sentCount.get(0);
+                addToDC("messageCount", count.sentMessages);
+                log.infof("Message%s sent", count.sentMessages > 0 ? "s" : "");
+                return Uni.createFrom().item(Response.ok(count).status(Response.Status.CREATED).build());
+            })
+            .onFailure().recoverWithItem(e -> {
+                log.error("Failed to send message");
+                return new ActionError(e).toResponse();
+            });
+
+        return result;
+    }
+
+    /**
+     * Mark notification message as read.
+     * @param auth The access token needed to call the service.
+     * @param messageId The Id of the message to mark as read.
+     * @return API Response, wraps an ActionSuccess or an ActionError entity
+     */
+    @PATCH
+    @Path("/message/{messageId}/read")
+    @SecurityRequirement(name = "OIDC")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RolesAllowed( Role.IMS_USER )
+    @Operation(operationId = "markMessageRead", summary = "Mark message as read")
+    @APIResponses(value = {
+            @APIResponse(responseCode = "201", description = "Read",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON,
                     schema = @Schema(implementation = ActionSuccess.class))),
             @APIResponse(responseCode = "400", description="Invalid parameters or configuration",
@@ -106,44 +201,100 @@ public class Messages extends BaseResource {
                     schema = @Schema(implementation = ActionError.class))),
             @APIResponse(responseCode = "503", description="Try again later")
     })
-    public Uni<Response> sendToUser(@RestHeader(HttpHeaders.AUTHORIZATION) String auth, Message message)
+    public Uni<Response> markRead(@RestHeader(HttpHeaders.AUTHORIZATION) String auth,
+
+                                  @RestPath("messageId")
+                                  Long messageId)
     {
-        addToDC("userIdCaller", identity.getAttribute(CheckinUser.ATTR_USERID));
+        final var checkinUserId = identity.getAttribute(CheckinUser.ATTR_USERID).toString();
+        addToDC("userIdCaller", checkinUserId);
         addToDC("userNameCaller", identity.getAttribute(CheckinUser.ATTR_FULLNAME));
         addToDC("processName", imsConfig.group());
-        addToDC("message", message);
+        addToDC("messageId", messageId);
 
-        log.info("Sending message to user");
-
-        if(null == message.message || message.message.isBlank()) {
-            // Message must be specified
-            var ae = new ActionError("badRequest", "Message body is required");
-            return Uni.createFrom().item(ae.toResponse());
-        }
-        if(null == message.checkinUserId || message.checkinUserId.isBlank()) {
-            // Recipient must be specified
-            var ae = new ActionError("badRequest", "Message recipient is required");
-            return Uni.createFrom().item(ae.toResponse());
-        }
+        log.info("Reading message");
 
         Uni<Response> result = Uni.createFrom().nullItem()
 
             .chain(unused -> {
-                return sf.withTransaction((session, tx) -> {
-                    // Create new message
-                    var newMessage = new MessageEntity(message);
-                    return session.persist(newMessage);
+                return sf.withTransaction((session, tx) -> { return
+                    // Get the message
+                    MessageEntity.getMessage(messageId)
+                    .chain(message -> {
+                        // Got the message
+                        if(null == message)
+                            // No such message
+                            return Uni.createFrom().failure(new ActionException("notFound", "Message not found"));
+
+                        if(!message.checkinUserId.equals(checkinUserId))
+                            // This message does not belong to the caller
+                            return Uni.createFrom().failure(new ActionException("noAccess",
+                                                                                "Can only read your own messages"));
+
+                        // Update message
+                        message.wasRead = true;
+                        return session.persist(message);
+                    });
                 });
             })
             .chain(unused -> {
-                // Send complete, success
-                log.info("Message sent");
-                return Uni.createFrom().item(Response.ok(new ActionSuccess("Sent"))
+                // Read complete, success
+                log.info("Message read");
+                return Uni.createFrom().item(Response.ok(new ActionSuccess("Read"))
                                                      .status(Response.Status.CREATED).build());
             })
             .onFailure().recoverWithItem(e -> {
-                log.error("Failed to send message");
+                log.error("Failed to read message");
                 return new ActionError(e).toResponse();
+            });
+
+        return result;
+    }
+
+    /**
+     * Get number of unread notification messages for the caller.
+     * @param auth The access token needed to call the service.
+     * @return API Response, wraps a {@link Count} or an ActionError entity
+     */
+    @GET
+    @Path("/messages/unread")
+    @SecurityRequirement(name = "OIDC")
+    @RolesAllowed( Role.IMS_USER )
+    @Operation(operationId = "countUnreadMessages", summary = "Get number of unread messages")
+    @APIResponses(value = {
+            @APIResponse(responseCode = "200", description = "Success",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = Count.class))),
+            @APIResponse(responseCode = "400", description="Invalid parameters or configuration",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = ActionError.class))),
+            @APIResponse(responseCode = "401", description="Authorization required"),
+            @APIResponse(responseCode = "503", description="Try again later")
+    })
+    public Uni<Response> countUnread(@RestHeader(HttpHeaders.AUTHORIZATION) String auth)
+    {
+        final var checkinUserId = identity.getAttribute(CheckinUser.ATTR_USERID).toString();
+        addToDC("userIdCaller", checkinUserId);
+        addToDC("userNameCaller", identity.getAttribute(CheckinUser.ATTR_FULLNAME));
+        addToDC("processName", imsConfig.group());
+
+        log.info("Count unread messages");
+
+        Uni<Response> result = Uni.createFrom().nullItem()
+
+            .chain(unused -> {
+                return sf.withSession(session -> MessageEntity.countUnreadMessages(checkinUserId));
+            })
+            .chain(unread -> {
+                // Got unread count, success
+                log.info("Got unread message count");
+                var count = new Count(unread > 0 ? "Found unread messages" : "No unread messages");
+                count.unreadMessages = unread;
+                return Uni.createFrom().item(Response.ok(count).build());
+            })
+            .onFailure().recoverWithItem(e -> {
+                log.error("Failed to count unread messages");
+                return new ActionError(e, Tuple2.of("oidcInstance", this.checkinConfig.server())).toResponse();
             });
 
         return result;
@@ -154,7 +305,7 @@ public class Messages extends BaseResource {
      * @param auth The access token needed to call the service.
      * @param from_ The first element to return
      * @param limit_ The maximum number of elements to return
-     * @return API Response, wraps an ActionSuccess({@link PageOfMessages}) or an ActionError entity
+     * @return API Response, wraps an {@link PageOfMessages} or an ActionError entity
      */
     @GET
     @Path("/messages")
@@ -171,22 +322,21 @@ public class Messages extends BaseResource {
                     content = @Content(mediaType = MediaType.APPLICATION_JSON,
                     schema = @Schema(implementation = ActionError.class))),
             @APIResponse(responseCode = "401", description="Authorization required"),
-            @APIResponse(responseCode = "403", description="Permission denied"),
             @APIResponse(responseCode = "503", description="Try again later")
     })
-    public Uni<Response> listMessages(@RestHeader(HttpHeaders.AUTHORIZATION) String auth,
-                                      @Context UriInfo uriInfo,
-                                      @Context HttpHeaders httpHeaders,
+    public Uni<Response> list(@RestHeader(HttpHeaders.AUTHORIZATION) String auth,
+                              @Context UriInfo uriInfo,
+                              @Context HttpHeaders httpHeaders,
 
-                                      @RestQuery("from")
-                                      @Parameter(description = "Only return logs before this date and time")
-                                      @Schema(format = "yyyy-mm-ddThh:mm:ss", defaultValue = "now")
-                                      String from_,
+                              @RestQuery("from")
+                              @Parameter(description = "Only return logs before this date and time")
+                              @Schema(format = "yyyy-mm-ddThh:mm:ss", defaultValue = "now")
+                              String from_,
 
-                                      @RestQuery("limit")
-                                      @Parameter(description = "Restrict the number of results returned")
-                                      @Schema(defaultValue = "100")
-                                      int limit_)
+                              @RestQuery("limit")
+                              @Parameter(description = "Restrict the number of results returned")
+                              @Schema(defaultValue = "100")
+                              int limit_)
     {
         final int limit = (0 == limit_) ? 100 : limit_;
 
@@ -214,26 +364,26 @@ public class Messages extends BaseResource {
         LocalDateTime finalFrom = from;
         Uni<Response> result = Uni.createFrom().nullItem()
 
-                .chain(unused -> {
-                    return sf.withSession(session -> MessageEntity.getMessages(checkinUserId, finalFrom, limit));
-                })
-                .chain(logs -> {
-                    // Got messages, success
-                    log.info("Got messages");
-                    var uri = getRealRequestUri(uriInfo, httpHeaders);
-                    var page = new PageOfMessages(uri.toString(), finalFrom, limit, logs);
-                    var logCount = logs.size();
-                    if(!logs.isEmpty() && logCount == limit) {
-                        var lastLog = logs.get(logCount - 1);
-                        page.setNextPage(lastLog.sentOn, limit);
-                    }
+            .chain(unused -> {
+                return sf.withSession(session -> MessageEntity.getMessages(checkinUserId, finalFrom, limit));
+            })
+            .chain(messages -> {
+                // Got messages, success
+                log.info("Got messages");
+                var uri = getRealRequestUri(uriInfo, httpHeaders);
+                var page = new PageOfMessages(uri.toString(), finalFrom, limit, messages);
+                var logCount = messages.size();
+                if(!messages.isEmpty() && logCount == limit) {
+                    var lastLog = messages.get(logCount - 1);
+                    page.setNextPage(lastLog.sentOn, limit);
+                }
 
-                    return Uni.createFrom().item(Response.ok(page).build());
-                })
-                .onFailure().recoverWithItem(e -> {
-                    log.error("Failed to list messages");
-                    return new ActionError(e, Tuple2.of("oidcInstance", this.checkinConfig.server())).toResponse();
-                });
+                return Uni.createFrom().item(Response.ok(page).build());
+            })
+            .onFailure().recoverWithItem(e -> {
+                log.error("Failed to list messages");
+                return new ActionError(e, Tuple2.of("oidcInstance", this.checkinConfig.server())).toResponse();
+            });
 
         return result;
     }
