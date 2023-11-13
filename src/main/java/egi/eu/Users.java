@@ -91,7 +91,7 @@ public class Users extends BaseResource {
     {
         addToDC("userIdCaller", identity.getAttribute(CheckinUser.ATTR_USERID));
         addToDC("userNameCaller", identity.getAttribute(CheckinUser.ATTR_FULLNAME));
-        addToDC("processName", "MSG");
+        addToDC("processName", imsConfig.group());
 
         log.info("Getting user info");
 

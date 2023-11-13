@@ -80,7 +80,7 @@ quarkus:
     urls-primary-name: default
   smallrye-openapi:
     path: /openapi
-    info-version: 1.0.8
+    info-version: 1.0.10
     security-scheme-name: OIDC
     security-scheme-description: OpenID Connect access token issued by EGI Check-In
     security-scheme: jwt
@@ -128,6 +128,8 @@ quarkus:
       username: ims
       password: password
   hibernate-orm:
+    database:
+      generation: none
     log:
       sql: true
       bind-parameters: false
@@ -135,17 +137,8 @@ quarkus:
     metrics:
       enabled: false
 
-"%dev":
-  quarkus:
-    hibernate-orm:
-      sql-load-script: import.sql
-      database:
-        generation: drop-and-create
-
 "%prod":
   quarkus:
     hibernate-orm:
-      database:
-        generation: none
       log:
         sql: false
