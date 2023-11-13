@@ -106,7 +106,8 @@ public class Messages extends BaseResource {
     })
     public Uni<Response> send(@RestHeader(HttpHeaders.AUTHORIZATION) String auth, Message message)
     {
-        addToDC("userIdCaller", identity.getAttribute(CheckinUser.ATTR_USERID));
+        final var checkinUserId = identity.getAttribute(CheckinUser.ATTR_USERID).toString();
+        addToDC("userIdCaller", checkinUserId);
         addToDC("userNameCaller", identity.getAttribute(CheckinUser.ATTR_FULLNAME));
         addToDC("processName", imsConfig.group());
         addToDC("message", message);
@@ -151,8 +152,11 @@ public class Messages extends BaseResource {
 
                     var messages = new ArrayList<MessageEntity>();
                     for(var user : usersWithRole) {
-                        message.checkinUserId = user.checkinUserId;
-                        messages.add(new MessageEntity(message));
+                        // When sending to all users with role, exclude caller
+                        if(!checkinUserId.equals(user.checkinUserId)) {
+                            message.checkinUserId = user.checkinUserId;
+                            messages.add(new MessageEntity(message));
+                        }
                     }
                     sentCount.add(messages.size());
 
