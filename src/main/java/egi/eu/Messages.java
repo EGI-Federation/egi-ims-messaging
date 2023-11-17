@@ -153,10 +153,11 @@ public class Messages extends BaseResource {
                     var messages = new ArrayList<MessageEntity>();
                     for(var user : usersWithRole) {
                         // When sending to all users with role, exclude caller
-                        if(!checkinUserId.equals(user.checkinUserId)) {
-                            message.checkinUserId = user.checkinUserId;
-                            messages.add(new MessageEntity(message));
-                        }
+                        if(sendToRole && checkinUserId.equals(user.checkinUserId))
+                            continue;
+
+                        message.checkinUserId = user.checkinUserId;
+                        messages.add(new MessageEntity(message));
                     }
                     sentCount.add(messages.size());
 
@@ -216,7 +217,7 @@ public class Messages extends BaseResource {
         addToDC("processName", imsConfig.group());
         addToDC("messageId", messageId);
 
-        log.info("Reading message");
+        log.info("Marking message read");
 
         Uni<Response> result = Uni.createFrom().nullItem()
 
@@ -243,12 +244,76 @@ public class Messages extends BaseResource {
             })
             .chain(unused -> {
                 // Read complete, success
-                log.info("Message read");
+                log.info("Message marked read");
                 return Uni.createFrom().item(Response.ok(new ActionSuccess("Read"))
                                                      .status(Response.Status.CREATED).build());
             })
             .onFailure().recoverWithItem(e -> {
-                log.error("Failed to read message");
+                log.error("Failed to mark message read");
+                return new ActionError(e).toResponse();
+            });
+
+        return result;
+    }
+
+    /**
+     * Mark all notifications or the caller as read.
+     * @param auth The access token needed to call the service.
+     * @return API Response, wraps an ActionSuccess or an ActionError entity
+     */
+    @PATCH
+    @Path("/messages/read")
+    @SecurityRequirement(name = "OIDC")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RolesAllowed( Role.IMS_USER )
+    @Operation(operationId = "markAllMessagesRead", summary = "Mark all messages as read")
+    @APIResponses(value = {
+            @APIResponse(responseCode = "201", description = "Read",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = ActionSuccess.class))),
+            @APIResponse(responseCode = "400", description="Invalid parameters or configuration",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = ActionError.class))),
+            @APIResponse(responseCode = "401", description="Authorization required"),
+            @APIResponse(responseCode = "403", description="Permission denied"),
+            @APIResponse(responseCode = "404", description="Not found",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = ActionError.class))),
+            @APIResponse(responseCode = "503", description="Try again later")
+    })
+    public Uni<Response> markAllRead(@RestHeader(HttpHeaders.AUTHORIZATION) String auth)
+    {
+        final var checkinUserId = identity.getAttribute(CheckinUser.ATTR_USERID).toString();
+        addToDC("userIdCaller", checkinUserId);
+        addToDC("userNameCaller", identity.getAttribute(CheckinUser.ATTR_FULLNAME));
+        addToDC("processName", imsConfig.group());
+
+        log.info("Marking all messages read");
+
+        Uni<Response> result = Uni.createFrom().nullItem()
+
+            .chain(unused -> {
+                return sf.withTransaction((session, tx) -> { return
+                    // Get all unread messages
+                    MessageEntity.getUnreadMessages(checkinUserId)
+                    .chain(messages -> {
+                        // Got the unread messages
+                        for(var message : messages)
+                            message.wasRead = true;
+
+                        // Update messages
+                        return session.persistAll(messages.toArray());
+                    });
+                });
+            })
+            .chain(unused -> {
+                // Read complete, success
+                log.info("All messages marked read");
+                return Uni.createFrom().item(Response.ok(new ActionSuccess("Read"))
+                                                     .status(Response.Status.CREATED).build());
+            })
+            .onFailure().recoverWithItem(e -> {
+                log.error("Failed to mark all messages read");
                 return new ActionError(e).toResponse();
             });
 

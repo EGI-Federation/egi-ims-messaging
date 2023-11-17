@@ -30,6 +30,9 @@ public class MessageEntity extends PanacheEntityBase {
     @NotNull
     public String message;
 
+    @Column(length = 10)
+    public String category;
+
     @Column(length = 256)
     public String link;
 
@@ -58,7 +61,8 @@ public class MessageEntity extends PanacheEntityBase {
         super();
 
         this.message = message.message;
-        this.link = message.link;
+        this.category = message.category;
+        this.link = message.url;
         this.checkinUserId = message.checkinUserId;
         this.wasRead = false;
         this.sentOn = LocalDateTime.now();
@@ -89,6 +93,18 @@ public class MessageEntity extends PanacheEntityBase {
         return find("checkinUserId = :checkinUserId AND sentOn < :from ORDER BY sentOn DESC", params)
                 .page(Page.ofSize(limit))
                 .list();
+    }
+
+    /***
+     * Get unread messages for a user.
+     * @param checkinUserId The user to fetch messages for
+     * @return Message entities
+     */
+    public static Uni<List<MessageEntity>> getUnreadMessages(String checkinUserId) {
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("checkinUserId", checkinUserId);
+        return find("checkinUserId = :checkinUserId AND wasRead = false", params).list();
     }
 
     /***

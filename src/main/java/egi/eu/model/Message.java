@@ -22,22 +22,25 @@ public class Message {
     @Schema(description="Notification message")
     public String message; // Markdown
 
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    public String category;
+
     @Schema(description="Optional action link")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public String link;
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    public String url;
 
     @Schema(description="Addressee of the message")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public String checkinUserId;
 
     @Schema(description="IMS process of the role.\n" +
                         "Use together with field _role_.")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public String process;
 
     @Schema(description="Send message to all users holding this process-specific role.\n" +
                         "Use together with field _group_.")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public String role;
 
     public boolean wasRead;
@@ -59,7 +62,8 @@ public class Message {
     public Message(MessageEntity message) {
         this.id = message.id;
         this.message = message.message;
-        this.link = message.link;
+        this.category = message.category;
+        this.url = message.link;
         this.wasRead = message.wasRead;
         this.sentOn = message.sentOn;
     }
