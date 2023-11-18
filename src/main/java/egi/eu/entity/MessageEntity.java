@@ -1,13 +1,16 @@
 package egi.eu.entity;
 
+import org.hibernate.annotations.UpdateTimestamp;
 import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import io.quarkus.panache.common.Page;
 import io.smallrye.common.constraint.NotNull;
 import io.smallrye.mutiny.Uni;
-import org.hibernate.annotations.UpdateTimestamp;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +68,9 @@ public class MessageEntity extends PanacheEntityBase {
         this.link = message.url;
         this.checkinUserId = message.checkinUserId;
         this.wasRead = false;
-        this.sentOn = LocalDateTime.now();
+        this.sentOn = ZonedDateTime.now(ZoneOffset.UTC)
+                            .withZoneSameInstant(ZoneId.systemDefault())
+                            .toLocalDateTime();
     }
 
     /***

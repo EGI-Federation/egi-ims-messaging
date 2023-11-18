@@ -23,6 +23,8 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
@@ -371,8 +373,8 @@ public class Messages extends BaseResource {
 
     /**
      * List notification messages for the caller.
-     * @param auth The access token needed to call the service.
-     * @param from_ The first element to return
+     * @param auth The access token needed to call the service
+     * @param from_ The UTC date and time after which to return elements
      * @param limit_ The maximum number of elements to return
      * @return API Response, wraps an {@link PageOfMessages} or an ActionError entity
      */
@@ -398,8 +400,9 @@ public class Messages extends BaseResource {
                               @Context HttpHeaders httpHeaders,
 
                               @RestQuery("from")
-                              @Parameter(description = "Only return logs before this date and time")
-                              @Schema(format = "yyyy-mm-ddThh:mm:ss", defaultValue = "now")
+                              @Parameter(description = "Only return logs before this UTC date and time.\n" +
+                                                       "Do not include time zone in this parameter.")
+                              @Schema(format = "yyyy-mm-ddThh:mm:ss.SSSSSS", defaultValue = "now")
                               String from_,
 
                               @RestQuery("limit")
@@ -423,7 +426,11 @@ public class Messages extends BaseResource {
             if((null == from_ || from_.isBlank() || from_.equalsIgnoreCase("now")))
                 from = LocalDateTime.now();
             else
-                from = LocalDateTime.parse(from_);
+                // Convert from UTC to the local timezone
+                from = LocalDateTime.parse(from_)
+                                    .atZone(ZoneOffset.UTC)
+                                    .withZoneSameInstant(ZoneId.systemDefault())
+                                    .toLocalDateTime();
         }
         catch(DateTimeParseException e) {
             var ae = new ActionError("badRequest", "Invalid parameter from");

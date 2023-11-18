@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 
 import egi.eu.entity.MessageEntity;
 
@@ -45,9 +47,11 @@ public class Message {
 
     public boolean wasRead;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS")
+    @Schema(description="Date and time of the notification. Assigned automatically, you should never send this.\n" +
+                        "Always returned as UTC date and time.")
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
-    public LocalDateTime sentOn;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS", timezone = "UTC")
+    public LocalDateTime sentOn; // UTC
 
 
     /***
@@ -65,6 +69,10 @@ public class Message {
         this.category = message.category;
         this.url = message.link;
         this.wasRead = message.wasRead;
-        this.sentOn = message.sentOn;
+        this.sentOn = (null == message.sentOn) ? null :
+                message.sentOn
+                       .atZone(ZoneId.systemDefault())
+                       .withZoneSameInstant(ZoneOffset.UTC)
+                       .toLocalDateTime();
     }
 }

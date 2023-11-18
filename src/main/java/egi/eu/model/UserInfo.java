@@ -5,12 +5,11 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
-import egi.checkin.model.CheckinUser;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import egi.checkin.model.CheckinUser;
 
 /**
  * Details of the current user
