@@ -2,6 +2,7 @@ package egi.eu.model;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.time.LocalDateTime;
@@ -50,7 +51,7 @@ public class Message {
     @Schema(description="Date and time of the notification. Assigned automatically, you should never send this.\n" +
                         "Always returned as UTC date and time.")
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS", timezone = "UTC")
+    @JsonSerialize(using = VersionInfo.UtcLocalDateTimeSerializer.class)
     public LocalDateTime sentOn; // UTC
 
 
@@ -69,10 +70,6 @@ public class Message {
         this.category = message.category;
         this.url = message.link;
         this.wasRead = message.wasRead;
-        this.sentOn = (null == message.sentOn) ? null :
-                message.sentOn
-                       .atZone(ZoneId.systemDefault())
-                       .withZoneSameInstant(ZoneOffset.UTC)
-                       .toLocalDateTime();
+        this.sentOn = message.sentOn;
     }
 }
