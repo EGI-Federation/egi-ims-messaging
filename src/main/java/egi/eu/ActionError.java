@@ -238,6 +238,7 @@ public class ActionError {
             case "noAccess" -> this.status = Status.FORBIDDEN;
             case "badRequest" -> this.status = Status.BAD_REQUEST;
             case "notFound" -> this.status = Status.NOT_FOUND;
+            case "fileExists" -> this.status = Status.CONFLICT;
             default -> {
                 return false;
             }

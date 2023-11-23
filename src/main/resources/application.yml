@@ -12,6 +12,8 @@ egi:
     cache-vo-members: 600000 # milliseconds
     cache-roles: 60000 # milliseconds
     trace-roles: false
+  images:
+    path: "C:/Work/EGI IMS Tool/egi-ims-tool/frontend/application/public/images"
   qos:
     quantiles: [0.95]
     slos: [500] # SLOs in milliseconds
@@ -80,7 +82,7 @@ quarkus:
     urls-primary-name: default
   smallrye-openapi:
     path: /openapi
-    info-version: 1.0.16
+    info-version: 1.0.18
     security-scheme-name: OIDC
     security-scheme-description: OpenID Connect access token issued by EGI Check-In
     security-scheme: jwt
