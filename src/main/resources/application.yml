@@ -12,6 +12,8 @@ egi:
     cache-vo-members: 600000 # milliseconds
     cache-roles: 60000 # milliseconds
     trace-roles: false
+  jira:
+    token: 123456
   images:
     path: "C:/Work/EGI IMS Tool/egi-ims-tool/frontend/application/public/images"
   qos:
