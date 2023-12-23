@@ -131,7 +131,7 @@ public class Messages extends BaseResource {
                 // Get REST client for Check-in
                 if(sendToRole && !checkin.init(this.checkinConfig, this.imsConfig, stub))
                     // Could not get REST client
-                    return Uni.createFrom().failure(new ServiceException("invalidConfig"));
+                    return Uni.createFrom().failure(new ActionException("invalidConfig"));
 
                 return Uni.createFrom().item(unused);
             })

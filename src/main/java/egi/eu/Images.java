@@ -106,7 +106,7 @@ public class Images extends BaseResource {
                 // Check if file already exists
                 var path = java.nio.file.Path.of(this.imgConfig.path()).resolve(info.name);
                 if(Files.exists(path))
-                    return Uni.createFrom().failure(new ServiceException("fileExists", "Cannot overwrite existing file"));
+                    return Uni.createFrom().failure(new ActionException("fileExists", "Cannot overwrite existing file"));
 
                 return Uni.createFrom().voidItem();
             })
@@ -164,7 +164,7 @@ public class Images extends BaseResource {
                 // Check if file already exists
                 var path = java.nio.file.Path.of(this.imgConfig.path()).resolve(imageFile.fileName());
                 if(Files.exists(path))
-                    return Uni.createFrom().failure(new ServiceException("fileExists", "Cannot overwrite existing file"));
+                    return Uni.createFrom().failure(new ActionException("fileExists", "Cannot overwrite existing file"));
 
                 try {
                     Files.move(imageFile.uploadedFile(), path, REPLACE_EXISTING);
