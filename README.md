@@ -10,7 +10,7 @@ The Messaging Service API is a component of the
 service, which provides tools to automate and simplify the IMS processes. This component can send notifications to IMS participants about their pending tasks in the IMS, as well as can track Jira tickets related to various IMS procedures and notify the involved IMS users when the tickets change.
 
 This project uses [Quarkus](https://quarkus.io), the Supersonic Subatomic Java Framework.
-It requires [Java 17](https://openjdk.org/projects/jdk/17/).
+It requires [Java 17](https://openjdk.org/projects/jdk/17/) and Quarkus [tooling](https://quarkus.io/guides/cli-tooling).
 
 ## Authentication and authorization
 
